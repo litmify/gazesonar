@@ -31,6 +31,10 @@ class TobiiFrameCapture:
             self.logger.debug(f"Attempting to open VideoCapture...")
             self.video_cap = cv2.VideoCapture(rtsp_url)
             
+            # Reduce video buffering for lower latency
+            self.video_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            self.video_cap.set(cv2.CAP_PROP_FPS, 30)
+            
             if not self.video_cap.isOpened():
                 self.logger.error(f"VideoCapture.isOpened() returned False for {rtsp_url}")
                 raise Exception("Failed to open video stream")
@@ -83,36 +87,27 @@ class TobiiFrameCapture:
     
     def get_raw_frame(self):
         if not self.is_connected:
-            self.logger.warning("Not connected to Tobii Glasses")
             return None
         
-        self.logger.debug("Reading raw frame...")
-        ret, frame = self.video_cap.read()
+        # Flush buffer to get latest frame
+        self.video_cap.grab()
+        ret, frame = self.video_cap.retrieve()
         if not ret:
-            self.logger.warning("Failed to capture frame")
-            self.logger.debug(f"VideoCapture.read() returned: ret={ret}")
             return None
         
-        self.logger.debug(f"Raw frame captured: shape={frame.shape}, dtype={frame.dtype}")
         return frame
     
     def get_gaze_position(self):
         if not self.is_connected:
-            self.logger.debug("get_gaze_position called but not connected")
             return None
         
-        self.logger.debug("Fetching gaze data...")
         gaze_data = self.tobii_controller.get_data()['gp']
-        self.logger.debug(f"Raw gaze data: {gaze_data}")
         
         if gaze_data['ts'] > 0:
-            result = {
+            return {
                 'normalized': (gaze_data['gp'][0], gaze_data['gp'][1]),
                 'timestamp': gaze_data['ts']
             }
-            self.logger.debug(f"Returning gaze position: {result}")
-            return result
-        self.logger.debug("No valid gaze data (timestamp <= 0)")
         return None
     
     def disconnect(self):
