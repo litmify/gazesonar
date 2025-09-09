@@ -20,7 +20,7 @@ python gaze_sonar.py
 python gaze_sonar.py --tobii-address 192.168.71.50
 
 # Use different YOLO model
-python gaze_sonar.py --yolo-model yolov8s.pt
+python gaze_sonar.py --yolo-model yolo11s.pt
 
 # Save output video
 python gaze_sonar.py --save-video --output my_recording.mp4

@@ -6,7 +6,7 @@ from tobii_capture import TobiiFrameCapture
 from yolo_detector import YOLODetector
 
 class GazeSonar:
-    def __init__(self, tobii_address=None, yolo_model='yolov8n.pt', confidence_threshold=0.5, debug=False):
+    def __init__(self, tobii_address=None, yolo_model='yolo11n.pt', confidence_threshold=0.5, debug=False):
         logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
         self.logger = logging.getLogger(__name__)
         self.debug = debug
@@ -201,8 +201,8 @@ def main():
     parser = argparse.ArgumentParser(description='GazeSonar - Tobii Glasses + YOLO Object Detection')
     parser.add_argument('--tobii-address', type=str, default=None,
                        help='IP address of Tobii Glasses (auto-discover if not provided)')
-    parser.add_argument('--yolo-model', type=str, default='yolov8n.pt',
-                       help='YOLO model to use (default: yolov8n.pt)')
+    parser.add_argument('--yolo-model', type=str, default='yolo11n.pt',
+                       help='YOLO model to use (default: yolo11n.pt)')
     parser.add_argument('--confidence', type=float, default=0.5,
                        help='Confidence threshold for object detection (default: 0.5)')
     parser.add_argument('--no-display', action='store_true',

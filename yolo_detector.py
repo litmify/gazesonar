@@ -4,7 +4,7 @@ from ultralytics import YOLO
 import logging
 
 class YOLODetector:
-    def __init__(self, model_name='yolov8n.pt', confidence_threshold=0.5, debug=False):
+    def __init__(self, model_name='yolo11n.pt', confidence_threshold=0.5, debug=False):
         logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
         self.logger = logging.getLogger(__name__)
         
