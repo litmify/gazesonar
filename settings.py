@@ -52,3 +52,10 @@ FONT_SMALL = 0.6  # Font scale for small text
 # Debug Settings
 DEBUG_MODE = False  # Enable debug logging
 CONSOLE_OUTPUT = False  # Enable console output for detections
+
+# TTS Settings
+TTS_ENABLED = True  # Enable Text-to-Speech for object announcements
+GAZE_PERSISTENCE_THRESHOLD = 1.0  # Seconds before announcing an object
+TTS_REPEAT_INTERVAL = 2.0  # Seconds between repeated announcements
+TTS_VOICE_RATE = 150  # Speech rate (words per minute)
+TTS_VOICE_VOLUME = 1.0  # Volume level (0.0 to 1.0)

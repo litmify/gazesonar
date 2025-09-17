@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import time
 import logging
+import pyttsx3
+import threading
 from tobii_capture import TobiiFrameCapture
 from yolo_detector import YOLODetector
 import settings
@@ -24,11 +26,26 @@ class GazeSonar:
         
         self.gaze_history = []
         self.history_size = settings.GAZE_HISTORY_SIZE
-        
+
         self.stats = {
             'frames_processed': 0,
             'fps': 0
         }
+
+        # Initialize TTS
+        self.tts_enabled = settings.TTS_ENABLED
+        if self.tts_enabled:
+            self.tts_engine = pyttsx3.init()
+            self.tts_engine.setProperty('rate', settings.TTS_VOICE_RATE)
+            self.tts_engine.setProperty('volume', settings.TTS_VOICE_VOLUME)
+            self.tts_lock = threading.Lock()
+            self.is_speaking = False
+
+        # Gaze persistence tracking
+        self.current_gazed_object = None
+        self.gaze_start_time = None
+        self.last_announcement_time = None
+        self.announced_object = None
         
         # For YOLO processing every 5th frame
         self.yolo_frame = None
@@ -149,6 +166,10 @@ class GazeSonar:
         gazed_object = None
         if latest_gaze and self.yolo_detections:
             gazed_object = self.yolo_detector.get_object_at_gaze(self.yolo_detections, latest_gaze)
+
+            # Track gaze persistence for TTS
+            if self.tts_enabled:
+                self.track_gaze_persistence(gazed_object)
         
         # Draw detections on YOLO frame
         annotated_frame = self.yolo_detector.draw_detections(
@@ -381,7 +402,73 @@ class GazeSonar:
             self.logger.info(f"Session stats:")
             self.logger.info(f"  Frames processed: {self.stats['frames_processed']}")
     
+    def track_gaze_persistence(self, gazed_object):
+        """Track how long the user has been looking at an object and trigger TTS"""
+        current_time = time.time()
+
+        if gazed_object:
+            # Check if we're looking at the same object
+            if self.current_gazed_object and \
+               self.current_gazed_object['class_name'] == gazed_object['class_name'] and \
+               self.current_gazed_object['bbox'] == gazed_object['bbox']:
+                # Still looking at the same object
+                time_gazed = current_time - self.gaze_start_time
+
+                # Check if we should announce
+                if time_gazed >= settings.GAZE_PERSISTENCE_THRESHOLD:
+                    # Check if we need to announce or repeat
+                    should_announce = False
+
+                    if self.announced_object != gazed_object['class_name']:
+                        # First time announcing this object
+                        should_announce = True
+                        self.announced_object = gazed_object['class_name']
+                        self.last_announcement_time = current_time
+                    elif self.last_announcement_time and \
+                         (current_time - self.last_announcement_time) >= settings.TTS_REPEAT_INTERVAL:
+                        # Time to repeat the announcement
+                        should_announce = True
+                        self.last_announcement_time = current_time
+
+                    if should_announce:
+                        self.announce_object(gazed_object['class_name'])
+            else:
+                # Looking at a different object, reset tracking
+                self.current_gazed_object = gazed_object
+                self.gaze_start_time = current_time
+                self.announced_object = None
+        else:
+            # Not looking at any object
+            self.current_gazed_object = None
+            self.gaze_start_time = None
+            self.announced_object = None
+            self.last_announcement_time = None
+
+    def announce_object(self, object_name):
+        """Use TTS to announce the object name"""
+        if not self.tts_enabled or self.is_speaking:
+            return
+
+        def speak():
+            with self.tts_lock:
+                self.is_speaking = True
+                try:
+                    self.logger.debug(f"Announcing: {object_name}")
+                    self.tts_engine.say(object_name)
+                    self.tts_engine.runAndWait()
+                except Exception as e:
+                    self.logger.error(f"TTS error: {e}")
+                finally:
+                    self.is_speaking = False
+
+        # Run TTS in a separate thread to avoid blocking
+        tts_thread = threading.Thread(target=speak)
+        tts_thread.daemon = True
+        tts_thread.start()
+
     def stop(self):
+        if self.tts_enabled:
+            self.tts_engine.stop()
         self.tobii_capture.disconnect()
 
 
@@ -403,9 +490,15 @@ def main():
                        help='Output video path (default: gaze_sonar_output.mp4)')
     parser.add_argument('--debug', action='store_true',
                        help='Enable debug logging')
+    parser.add_argument('--no-tts', action='store_true',
+                       help='Disable Text-to-Speech announcements')
     
     args = parser.parse_args()
-    
+
+    # Override TTS setting if --no-tts is specified
+    if args.no_tts:
+        settings.TTS_ENABLED = False
+
     gaze_sonar = GazeSonar(
         tobii_address=args.tobii_address,
         yolo_model=args.yolo_model,
