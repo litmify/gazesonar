@@ -55,7 +55,10 @@ CONSOLE_OUTPUT = False  # Enable console output for detections
 
 # TTS Settings
 TTS_ENABLED = True  # Enable Text-to-Speech for object announcements
-GAZE_PERSISTENCE_THRESHOLD = 1.0  # Seconds before announcing an object
-TTS_REPEAT_INTERVAL = 2.0  # Seconds between repeated announcements
+TTS_MODE = 'frame_check'  # 'gaze_persistence' or 'frame_check' mode
+TTS_ANNOUNCE_EVERY_N_FRAMES = 30  # Announce detected objects every N frames (1=every frame)
+GAZE_PERSISTENCE_THRESHOLD = 1.0  # Seconds before announcing an object (for gaze_persistence mode)
+TTS_REPEAT_INTERVAL = 2.0  # Seconds between repeated announcements (for gaze_persistence mode)
 TTS_VOICE_RATE = 150  # Speech rate (words per minute)
 TTS_VOICE_VOLUME = 1.0  # Volume level (0.0 to 1.0)
+TTS_ANNOUNCE_ALL_OBJECTS = False  # If True, announce all objects; if False, only the most confident

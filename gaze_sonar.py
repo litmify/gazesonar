@@ -46,6 +46,9 @@ class GazeSonar:
         self.gaze_start_time = None
         self.last_announcement_time = None
         self.announced_object = None
+
+        # Frame-based TTS tracking
+        self.last_frame_announcement = 0
         
         # For YOLO processing every 5th frame
         self.yolo_frame = None
@@ -100,6 +103,10 @@ class GazeSonar:
             self.yolo_frame = frame.copy()
             self.yolo_detections = self.yolo_detector.detect_objects(self.yolo_frame)
             print(f"[YOLO Frame {self.stats['frames_processed']}] Detected {len(self.yolo_detections)} objects")
+
+            # Frame-check TTS mode: announce detected objects
+            if self.tts_enabled and settings.TTS_MODE == 'frame_check':
+                self.announce_frame_objects()
         
         # Debug output every Nth frame based on settings
         if self.stats['frames_processed'] % settings.DEBUG_OUTPUT_EVERY_N_FRAMES == 0:
@@ -167,8 +174,8 @@ class GazeSonar:
         if latest_gaze and self.yolo_detections:
             gazed_object = self.yolo_detector.get_object_at_gaze(self.yolo_detections, latest_gaze)
 
-            # Track gaze persistence for TTS
-            if self.tts_enabled:
+            # Track gaze persistence for TTS (only in gaze_persistence mode)
+            if self.tts_enabled and settings.TTS_MODE == 'gaze_persistence':
                 self.track_gaze_persistence(gazed_object)
         
         # Draw detections on YOLO frame
@@ -445,7 +452,52 @@ class GazeSonar:
             self.last_announcement_time = None
 
     def announce_object(self, object_name):
-        """Use TTS to announce the object name"""
+        """Use TTS to announce the object name (for gaze persistence mode)"""
+        self.announce_text(object_name)
+
+    def announce_frame_objects(self):
+        """Announce detected objects based on frame check frequency"""
+        if not self.yolo_detections:
+            return
+
+        # Check if it's time to announce
+        if (self.stats['frames_processed'] - self.last_frame_announcement) < settings.TTS_ANNOUNCE_EVERY_N_FRAMES:
+            return
+
+        self.last_frame_announcement = self.stats['frames_processed']
+
+        # Prepare announcement based on settings
+        if settings.TTS_ANNOUNCE_ALL_OBJECTS:
+            # Announce all detected objects
+            object_names = [det['class_name'] for det in self.yolo_detections]
+            unique_objects = list(set(object_names))
+
+            if unique_objects:
+                # Count occurrences
+                object_counts = {}
+                for name in object_names:
+                    object_counts[name] = object_counts.get(name, 0) + 1
+
+                # Build announcement
+                announcements = []
+                for obj in unique_objects:
+                    count = object_counts[obj]
+                    if count > 1:
+                        announcements.append(f"{count} {obj}s")
+                    else:
+                        announcements.append(obj)
+
+                message = "Detected: " + ", ".join(announcements)
+                self.announce_text(message)
+        else:
+            # Announce only the most confident detection
+            if self.yolo_detections:
+                best_detection = max(self.yolo_detections, key=lambda x: x['confidence'])
+                message = f"Detected {best_detection['class_name']}"
+                self.announce_text(message)
+
+    def announce_text(self, text):
+        """Generic TTS announcement function"""
         if not self.tts_enabled or self.is_speaking:
             return
 
@@ -453,8 +505,8 @@ class GazeSonar:
             with self.tts_lock:
                 self.is_speaking = True
                 try:
-                    self.logger.debug(f"Announcing: {object_name}")
-                    self.tts_engine.say(object_name)
+                    self.logger.debug(f"Announcing: {text}")
+                    self.tts_engine.say(text)
                     self.tts_engine.runAndWait()
                 except Exception as e:
                     self.logger.error(f"TTS error: {e}")
@@ -492,12 +544,20 @@ def main():
                        help='Enable debug logging')
     parser.add_argument('--no-tts', action='store_true',
                        help='Disable Text-to-Speech announcements')
+    parser.add_argument('--tts-mode', type=str, choices=['gaze_persistence', 'frame_check'],
+                       default=None, help='TTS announcement mode')
+    parser.add_argument('--tts-frequency', type=int, default=None,
+                       help='Announce objects every N frames (for frame_check mode)')
     
     args = parser.parse_args()
 
-    # Override TTS setting if --no-tts is specified
+    # Override TTS settings from command line
     if args.no_tts:
         settings.TTS_ENABLED = False
+    if args.tts_mode:
+        settings.TTS_MODE = args.tts_mode
+    if args.tts_frequency:
+        settings.TTS_ANNOUNCE_EVERY_N_FRAMES = args.tts_frequency
 
     gaze_sonar = GazeSonar(
         tobii_address=args.tobii_address,
